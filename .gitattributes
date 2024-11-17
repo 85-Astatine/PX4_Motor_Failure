@@ -16,7 +16,7 @@
 *.jar    binary
 *.xml    text eol=lf
 # PX4 msgs, etc
-*.bin    binary
+*.bin filter=lfs diff=lfs merge=lfs -text
 *.msg    text eol=lf
 *.config text eol=lf
 *.sdf    text eol=lf
