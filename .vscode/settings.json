@@ -129,5 +129,19 @@
         "yaml.schemas": {
                 "${workspaceFolder}/validation/module_schema.yaml": "${workspaceFolder}/src/modules/*/module.yaml"
         },
-        "ros.distro": "humble"
+        "ros.distro": "humble",
+        "python.autoComplete.extraPaths": [
+                "/home/ub22/px4/install/px4_offboard/lib/python3.10/site-packages",
+                "/home/ub22/px4/install/mavros/local/lib/python3.10/dist-packages",
+                "/home/ub22/px4/install/mavros_msgs/local/lib/python3.10/dist-packages",
+                "/opt/ros/humble/lib/python3.10/site-packages",
+                "/opt/ros/humble/local/lib/python3.10/dist-packages"
+        ],
+        "python.analysis.extraPaths": [
+                "/home/ub22/px4/install/px4_offboard/lib/python3.10/site-packages",
+                "/home/ub22/px4/install/mavros/local/lib/python3.10/dist-packages",
+                "/home/ub22/px4/install/mavros_msgs/local/lib/python3.10/dist-packages",
+                "/opt/ros/humble/lib/python3.10/site-packages",
+                "/opt/ros/humble/local/lib/python3.10/dist-packages"
+        ]
 }

@@ -389,6 +389,36 @@ void MulticopterPositionControl::Run()
 	parameters_update(false);
 
 	perf_begin(_cycle_perf);
+
+
+	if (_gyro_sub.update(&_gyro_data)) {
+		// Store the gyro data in a variable
+		float roll_rate = _gyro_data.x;
+		float pitch_rate = _gyro_data.y;
+		const float GYRO_THRESHOLD = 2.0f;
+
+		if (!_motor_failure && ((roll_rate) >= GYRO_THRESHOLD || fabsf(pitch_rate) >= GYRO_THRESHOLD))
+		{
+			if (roll_rate >= 0.0f && pitch_rate >= 0.0f) {
+				_motor_failure = 4;  // Motor 4 failure
+			} else if (roll_rate >= 0.0f && pitch_rate <= 0.0f) {
+				_motor_failure = 1;  // Motor 1 failure
+			} else if (roll_rate <= 0.0f && pitch_rate <= 0.0f) {
+				_motor_failure = 3;  // Motor 3 failure
+			} else if (roll_rate <= 0.0f && pitch_rate >= 0.0f) {
+				_motor_failure = 2;  // Motor 2 failure
+			}
+			PX4_ERR("Motor Failure: %d", _motor_failure);
+		}
+	}
+
+	failure_msg.timestamp = hrt_absolute_time();
+	failure_msg.failure_type = _motor_failure;
+
+	_motor_failure_pub.publish(failure_msg);
+
+
+
 	vehicle_local_position_s vehicle_local_position;
 
 	if (_local_pos_sub.update(&vehicle_local_position)) {

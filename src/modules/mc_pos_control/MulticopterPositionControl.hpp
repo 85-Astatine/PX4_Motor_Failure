@@ -67,6 +67,8 @@
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
+#include <uORB/topics/sensor_gyro.h>
+#include <uORB/topics/failure_motor_status.h>
 
 using namespace time_literals;
 
@@ -98,6 +100,7 @@ private:
 	uORB::PublicationData<takeoff_status_s>              _takeoff_status_pub{ORB_ID(takeoff_status)};
 	uORB::Publication<vehicle_attitude_setpoint_s>	     _vehicle_attitude_setpoint_pub{ORB_ID(vehicle_attitude_setpoint)};
 	uORB::Publication<vehicle_local_position_setpoint_s> _local_pos_sp_pub{ORB_ID(vehicle_local_position_setpoint)};	/**< vehicle local position setpoint publication */
+	uORB::Publication<failure_motor_status_s> _motor_failure_pub{ORB_ID(failure_motor_status)};
 
 	uORB::SubscriptionCallbackWorkItem _local_pos_sub{this, ORB_ID(vehicle_local_position)};	/**< vehicle local position */
 
@@ -108,12 +111,16 @@ private:
 	uORB::Subscription _vehicle_constraints_sub{ORB_ID(vehicle_constraints)};
 	uORB::Subscription _vehicle_control_mode_sub{ORB_ID(vehicle_control_mode)};
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
+	uORB::Subscription _gyro_sub{ORB_ID(sensor_gyro)};
 
 	hrt_abstime _time_stamp_last_loop{0};		/**< time stamp of last loop iteration */
 	hrt_abstime _time_position_control_enabled{0};
 
 	trajectory_setpoint_s _setpoint{PositionControl::empty_trajectory_setpoint};
 	vehicle_control_mode_s _vehicle_control_mode{};
+	sensor_gyro_s _gyro_data{};
+	failure_motor_status_s failure_msg{};
+
 
 	vehicle_constraints_s _vehicle_constraints {
 		.timestamp = 0,
@@ -209,7 +216,7 @@ private:
 	hrt_abstime _last_warn{0}; /**< timer when the last warn message was sent out */
 
 	bool _hover_thrust_initialized{false};
-
+	int _motor_failure = 0;
 	/** Timeout in us for trajectory data to get considered invalid */
 	static constexpr uint64_t TRAJECTORY_STREAM_TIMEOUT_US = 500_ms;
 
@@ -255,4 +262,5 @@ private:
 	 */
 	void adjustSetpointForEKFResets(const vehicle_local_position_s &vehicle_local_position,
 					trajectory_setpoint_s &setpoint);
+
 };
