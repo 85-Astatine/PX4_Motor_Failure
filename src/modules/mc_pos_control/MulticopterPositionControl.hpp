@@ -40,7 +40,8 @@
 #include "PositionControl/PositionControl.hpp"
 #include "Takeoff/Takeoff.hpp"
 #include "GotoControl/GotoControl.hpp"
-
+#include "URestimator.hpp"
+#include <matrix/math.hpp>
 #include <drivers/drv_hrt.h>
 #include <lib/mathlib/math/filter/AlphaFilter.hpp>
 #include <lib/mathlib/math/filter/NotchFilter.hpp>
@@ -62,6 +63,7 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/trajectory_setpoint.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
+#include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_constraints.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_land_detected.h>
@@ -69,6 +71,7 @@
 #include <uORB/topics/vehicle_local_position_setpoint.h>
 #include <uORB/topics/sensor_gyro.h>
 #include <uORB/topics/failure_motor_status.h>
+
 
 using namespace time_literals;
 
@@ -112,6 +115,8 @@ private:
 	uORB::Subscription _vehicle_control_mode_sub{ORB_ID(vehicle_control_mode)};
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
 	uORB::Subscription _gyro_sub{ORB_ID(sensor_gyro)};
+	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
+	vehicle_attitude_s _vehicle_attitude{};
 
 	hrt_abstime _time_stamp_last_loop{0};		/**< time stamp of last loop iteration */
 	hrt_abstime _time_position_control_enabled{0};
@@ -121,6 +126,9 @@ private:
 	sensor_gyro_s _gyro_data{};
 	failure_motor_status_s failure_msg{};
 
+
+	// Create an instance of UREstimator
+	URestimator _urestimator;
 
 	vehicle_constraints_s _vehicle_constraints {
 		.timestamp = 0,

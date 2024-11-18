@@ -417,7 +417,27 @@ void MulticopterPositionControl::Run()
 
 	_motor_failure_pub.publish(failure_msg);
 
+	if (_vehicle_attitude_sub.updated()) {
+		_vehicle_attitude_sub.copy(&_vehicle_attitude);
 
+		// Convert quaternion to Euler angles
+		matrix::Quatf q(_vehicle_attitude.q); // Create Quatf object
+		matrix::Eulerf euler(q);             // Convert to Euler angles
+
+
+		// Extract roll, pitch, yaw
+		double phi = euler(0);   // Roll
+		double theta = euler(1); // Pitch
+		double psi = euler(2);   // Yaw
+		double timestamp = hrt_absolute_time();
+
+		// Pass to URestimator
+		Eigen::Vector3d att(phi, theta, psi);
+		_urestimator.update(att);
+
+		// Publish the calculated primary axis
+		_urestimator.publishPrimaryAxis(timestamp);
+    	}
 
 	vehicle_local_position_s vehicle_local_position;
 

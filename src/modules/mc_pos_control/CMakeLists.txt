@@ -34,7 +34,8 @@
 add_subdirectory(GotoControl)
 add_subdirectory(PositionControl)
 add_subdirectory(Takeoff)
-
+find_package(Eigen3 REQUIRED)
+include_directories(${EIGEN3_INCLUDE_DIR})
 px4_add_module(
 	MODULE modules__mc_pos_control
 	MAIN mc_pos_control
@@ -42,6 +43,8 @@ px4_add_module(
 	SRCS
 		MulticopterPositionControl.cpp
 		MulticopterPositionControl.hpp
+		URestimator.hpp
+		URestimator.cpp
 	DEPENDS
 		GotoControl
 		PositionControl
@@ -49,4 +52,5 @@ px4_add_module(
 		controllib
 		geo
 		SlewRate
+
 	)
