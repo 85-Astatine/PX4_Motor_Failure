@@ -45,6 +45,10 @@ px4_add_module(
 		MulticopterPositionControl.hpp
 		URestimator.hpp
 		URestimator.cpp
+		URPosControl.hpp
+		URPosControl.cpp
+        	ROTOR_OMEGA.hpp
+		ROTOR_OMEGA.cpp
 	DEPENDS
 		GotoControl
 		PositionControl

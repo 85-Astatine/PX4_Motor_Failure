@@ -388,8 +388,17 @@ void MulticopterPositionControl::Run()
 
 	parameters_update(false);
 
-	perf_begin(_cycle_perf);
+	params.position_maxAngle = 0.5236f;
+	params.position_maxVel = 5.0f;
+	params.position_Kp_pos = 1.0f;
+	params.position_Kp_vel = 0.5f;
+	params.position_Ki_vel = 0.1f;
+	params.position_intLim = 2.0f;
+	params.freq = 50.0f;
+	params.g = 9.81f;
 
+
+	perf_begin(_cycle_perf);
 
 	if (_gyro_sub.update(&_gyro_data)) {
 		// Store the gyro data in a variable
@@ -417,28 +426,55 @@ void MulticopterPositionControl::Run()
 
 	_motor_failure_pub.publish(failure_msg);
 
-	if (_vehicle_attitude_sub.updated()) {
-		_vehicle_attitude_sub.copy(&_vehicle_attitude);
+	//undo if testing is over
 
-		// Convert quaternion to Euler angles
-		matrix::Quatf q(_vehicle_attitude.q); // Create Quatf object
-		matrix::Eulerf euler(q);             // Convert to Euler angles
+	// if(_motor_failure>0){
+		if (_vehicle_attitude_sub.updated()) {
+			_vehicle_attitude_sub.copy(&_vehicle_attitude);
+
+			// Convert quaternion to Euler angles
+			matrix::Quatf q(_vehicle_attitude.q); // Create Quatf object
+			matrix::Eulerf euler(q);             // Convert to Euler angles
 
 
-		// Extract roll, pitch, yaw
-		double phi = euler(0);   // Roll
-		double theta = euler(1); // Pitch
-		double psi = euler(2);   // Yaw
-		double timestamp = hrt_absolute_time();
+			// Extract roll, pitch, yaw
+			double phi = euler(0);   // Roll
+			double theta = euler(1); // Pitch
+			double psi = euler(2);   // Yaw
+			double timestamp = hrt_absolute_time();
 
-		// Pass to URestimator
-		Eigen::Vector3d att(phi, theta, psi);
-		_urestimator.update(att);
+			// Pass to URestimator
+			Eigen::Vector3d att(phi, theta, psi);
+			_urestimator.update(att);
 
-		// Publish the calculated primary axis
-		_urestimator.publishPrimaryAxis(timestamp);
-    	}
+			// Publish the calculated primary axis
+			_urestimator.publishPrimaryAxis(timestamp);
+		}
 
+		_local_pos_sub.update(&_local_pos);
+		_trajectory_setpoint_sub.update(&_setpoint);
+		_vehicle_attitude_sub.update(&_vehicle_attitude);
+
+		Inputs inputs = {_setpoint.position[0], _setpoint.position[1], _setpoint.position[2]};
+		State state = {
+			{_local_pos.x, _local_pos.y, _local_pos.z},
+			{_local_pos.vx, _local_pos.vy, _local_pos.vz},
+			{0.0, 0.0, 0.0},
+			{0.0, 0.0, 0.0}
+		};
+
+		// Run the URpositionControl
+		std::array<double, 3> n_des = _ur_pos_control.control(inputs, state, params);
+
+		// Publish the result
+		vehicle_thrust_s thrust_msg{};
+		thrust_msg.timestamp = hrt_absolute_time();
+		thrust_msg.xyz	[0] = n_des[0];
+		thrust_msg.xyz	[1] = n_des[1];
+		thrust_msg.xyz	[2] = n_des[2];
+		_vehicle_thrust_pub.publish(thrust_msg);
+
+	// }
 	vehicle_local_position_s vehicle_local_position;
 
 	if (_local_pos_sub.update(&vehicle_local_position)) {

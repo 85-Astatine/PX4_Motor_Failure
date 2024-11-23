@@ -37,10 +37,12 @@
 
 #pragma once
 
+
 #include "PositionControl/PositionControl.hpp"
 #include "Takeoff/Takeoff.hpp"
 #include "GotoControl/GotoControl.hpp"
 #include "URestimator.hpp"
+#include "URPosControl.hpp"
 #include <matrix/math.hpp>
 #include <drivers/drv_hrt.h>
 #include <lib/mathlib/math/filter/AlphaFilter.hpp>
@@ -69,9 +71,11 @@
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
+#include <uORB/topics/vehicle_thrust.h>
 #include <uORB/topics/sensor_gyro.h>
 #include <uORB/topics/failure_motor_status.h>
-
+#include <uORB/topics/actuator_outputs.h>
+#include <uORB/topics/vehicle_rotor_forces.h>
 
 using namespace time_literals;
 
@@ -92,6 +96,7 @@ public:
 	static int print_usage(const char *reason = nullptr);
 
 	bool init();
+	int _motor_failure=0;
 
 private:
 	void Run() override;
@@ -104,6 +109,8 @@ private:
 	uORB::Publication<vehicle_attitude_setpoint_s>	     _vehicle_attitude_setpoint_pub{ORB_ID(vehicle_attitude_setpoint)};
 	uORB::Publication<vehicle_local_position_setpoint_s> _local_pos_sp_pub{ORB_ID(vehicle_local_position_setpoint)};	/**< vehicle local position setpoint publication */
 	uORB::Publication<failure_motor_status_s> _motor_failure_pub{ORB_ID(failure_motor_status)};
+	uORB::Publication<vehicle_thrust_s> _vehicle_thrust_pub{ORB_ID(vehicle_thrust)};
+
 
 	uORB::SubscriptionCallbackWorkItem _local_pos_sub{this, ORB_ID(vehicle_local_position)};	/**< vehicle local position */
 
@@ -116,8 +123,9 @@ private:
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
 	uORB::Subscription _gyro_sub{ORB_ID(sensor_gyro)};
 	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
-	vehicle_attitude_s _vehicle_attitude{};
 
+	vehicle_attitude_s _vehicle_attitude{};
+	vehicle_local_position_s _local_pos{};
 	hrt_abstime _time_stamp_last_loop{0};		/**< time stamp of last loop iteration */
 	hrt_abstime _time_position_control_enabled{0};
 
@@ -126,9 +134,8 @@ private:
 	sensor_gyro_s _gyro_data{};
 	failure_motor_status_s failure_msg{};
 
-
-	// Create an instance of UREstimator
-	URestimator _urestimator;
+	// trajectory_setpoint_s _setpoint{PositionControl::empty_trajectory_setpoint};
+	// vehicle_control_mode_s _vehicle_control_mode{};
 
 	vehicle_constraints_s _vehicle_constraints {
 		.timestamp = 0,
@@ -182,7 +189,6 @@ private:
 		(ParamFloat<px4::params::MPC_VEL_MAN_SIDE>) _param_mpc_vel_man_side,
 		(ParamFloat<px4::params::MPC_XY_CRUISE>)    _param_mpc_xy_cruise,
 		(ParamFloat<px4::params::MPC_LAND_ALT2>)    _param_mpc_land_alt2,    /**< downwards speed limited below this altitude */
-		(ParamInt<px4::params::MPC_POS_MODE>)       _param_mpc_pos_mode,
 		(ParamInt<px4::params::MPC_ALT_MODE>)       _param_mpc_alt_mode,
 		(ParamFloat<px4::params::MPC_TILTMAX_LND>)  _param_mpc_tiltmax_lnd,  /**< maximum tilt for landing and smooth takeoff */
 		(ParamFloat<px4::params::MPC_THR_MIN>)      _param_mpc_thr_min,
@@ -220,11 +226,15 @@ private:
 
 	GotoControl _goto_control; ///< class for handling smooth goto position setpoints
 	PositionControl _control; ///< class for core PID position control
+	URestimator _urestimator;
+	URPosControl _ur_pos_control;
+
+	Params params{};
 
 	hrt_abstime _last_warn{0}; /**< timer when the last warn message was sent out */
 
 	bool _hover_thrust_initialized{false};
-	int _motor_failure = 0;
+
 	/** Timeout in us for trajectory data to get considered invalid */
 	static constexpr uint64_t TRAJECTORY_STREAM_TIMEOUT_US = 500_ms;
 
@@ -270,5 +280,4 @@ private:
 	 */
 	void adjustSetpointForEKFResets(const vehicle_local_position_s &vehicle_local_position,
 					trajectory_setpoint_s &setpoint);
-
 };
