@@ -212,7 +212,54 @@ MulticopterAttitudeControl::Run()
 	// run controller on attitude updates
 	vehicle_attitude_s v_att;
 
+	// if (_failure_motor_status_sub.update()){
+	// 	_failure_motor_status_sub.copy(&_failure_motor_status);
+	// 	motor_failure = _failure_motor_status.motor_failure;
+	// }
+
 	if (_vehicle_attitude_sub.update(&v_att)) {
+		if(motor_failure>=0){ //TODO : UNDO THE =
+			YawControlInputs input;
+			// Get the vehicle attitude
+			_vehicle_attitude_sub.copy(&v_att);
+			Quatf q_att(v_att.q);
+
+			// Get the vehicle angular velocity
+			vehicle_angular_velocity_s v_ang_vel;
+			_vehicle_angular_velocity_sub.copy(&v_ang_vel);
+			Vector3f angular_velocity(v_ang_vel.xyz);
+
+			// Fill in the input and state structures
+			trajectory_setpoint_s trajectory_setpoint{};
+			if (_trajectory_setpoint_sub.copy(&trajectory_setpoint)) {
+				input.yawTarget = trajectory_setpoint.yaw;
+			} else {
+				input.yawTarget = 0.0f;
+			}
+
+			Eulerf euler_angles(q_att);
+			float roll = euler_angles.phi();
+			float pitch = euler_angles.theta();
+			float yaw = euler_angles.psi();
+			YawControlState state;
+			state.att[0]=roll;
+			state.att[1]=pitch;
+			state.att[2]=yaw;
+
+			state.omegaf[0] = angular_velocity(0);
+			state.omegaf[1] = angular_velocity(1);
+			state.omegaf[2] = angular_velocity(2);
+			YawControlParameters params;
+			params.YRC_Kp_psi = 0.1f;
+
+			yaw_sp = _yaw_control.computeYawRateCmd(input,state,params);
+			// Set the yaw rate setpoint
+			vehicle_rates_setpoint_s rates_setpoint{};
+			rates_setpoint.yaw = yaw_sp;
+			rates_setpoint.timestamp = hrt_absolute_time(); //TODO make new yaw sp publisher & topic
+			_vehicle_rates_setpoint_pub.publish(rates_setpoint);
+
+		}
 
 		// Guard against too small (< 0.2ms) and too large (> 20ms) dt's.
 		const float dt = math::constrain(((v_att.timestamp_sample - _last_run) * 1e-6f), 0.0002f, 0.02f);
@@ -327,7 +374,7 @@ MulticopterAttitudeControl::Run()
 			vehicle_rates_setpoint_s rates_setpoint{};
 			rates_setpoint.roll = rates_sp(0);
 			rates_setpoint.pitch = rates_sp(1);
-			rates_setpoint.yaw = rates_sp(2);
+			rates_setpoint.yaw = motor_failure==0 ? yaw_sp:rates_sp(2);
 			_thrust_setpoint_body.copyTo(rates_setpoint.thrust_body);
 			rates_setpoint.timestamp = hrt_absolute_time();
 

@@ -41,6 +41,8 @@ px4_add_module(
 	SRCS
 		mc_att_control_main.cpp
 		mc_att_control.hpp
+		yaw_control.hpp
+		yaw_control.cpp
 	DEPENDS
 		AttitudeControl
 		mathlib

@@ -54,10 +54,17 @@
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/vehicle_status.h>
+#include <uORB/topics/trajectory_setpoint.h> // added
+#include <uORB/topics/vehicle_angular_velocity.h> // added
+#include <uORB/topics/failure_motor_status.h> //added
+#include <uORB/topics/vehicle_trajectory_bezier.h>
+
 #include <lib/mathlib/math/filter/AlphaFilter.hpp>
 #include <lib/slew_rate/SlewRate.hpp>
 
+
 #include <AttitudeControl.hpp>
+#include "yaw_control.hpp"
 
 using namespace time_literals;
 
@@ -105,6 +112,10 @@ private:
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
 	uORB::Subscription _vehicle_local_position_sub{ORB_ID(vehicle_local_position)};
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
+	uORB::Subscription _trajectory_setpoint_sub{ORB_ID(trajectory_setpoint)}; //added
+	uORB::Subscription _vehicle_attitude_simple_sub{ORB_ID(vehicle_attitude)}; //added
+	uORB::Subscription _vehicle_angular_velocity_sub{ORB_ID(vehicle_angular_velocity)}; //added
+	uORB::Subscription _failure_motor_status_sub{ORB_ID(failure_motor_status)}; //added
 
 	uORB::SubscriptionCallbackWorkItem _vehicle_attitude_sub{this, ORB_ID(vehicle_attitude)};
 
@@ -139,6 +150,10 @@ private:
 	bool _vtol_in_transition_mode{false};
 
 	uint8_t _quat_reset_counter{0};
+
+	YawControl _yaw_control;
+	int motor_failure = 0; //currently not using it so set to 1;
+	float yaw_sp=0.0;
 
 	DEFINE_PARAMETERS(
 		(ParamInt<px4::params::MC_AIRMODE>)         _param_mc_airmode,
