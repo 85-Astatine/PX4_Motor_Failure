@@ -1,6 +1,8 @@
 #include "URPosControl.hpp"
 #include <cmath>
+#include <px4_platform_common/log.h>
 #include <algorithm>
+#include <iostream>
 
 std::array<double, 3> URPosControl::control(const Inputs &inputs, State &state, const Params &par) {
     double maxAngle = par.position_maxAngle;
@@ -53,6 +55,8 @@ std::array<double, 3> URPosControl::control(const Inputs &inputs, State &state, 
     // Normalize the output
     double norm_a_ref = std::sqrt(a_ref[0] * a_ref[0] + a_ref[1] * a_ref[1] + a_ref[2] * a_ref[2]);
     std::array<double, 3> n_des = {a_ref[0] / norm_a_ref, a_ref[1] / norm_a_ref, a_ref[2] / norm_a_ref};
+//     PX4_INFO("n_des: [%f, %f, %f]", n_des[0], n_des[1], n_des[2]);
 
     return n_des;
+
 }

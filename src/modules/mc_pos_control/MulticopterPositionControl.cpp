@@ -429,6 +429,7 @@ void MulticopterPositionControl::Run()
 	//undo if testing is over
 
 	// if(_motor_failure>0){
+
 		if (_vehicle_attitude_sub.updated()) {
 			_vehicle_attitude_sub.copy(&_vehicle_attitude);
 
@@ -449,30 +450,62 @@ void MulticopterPositionControl::Run()
 
 			// Publish the calculated primary axis
 			_urestimator.publishPrimaryAxis(timestamp);
+
+			if (_actuator_outputs_sub.update(&_actuator_outputs)) {
+				// Get the motor outputs
+				actuator_outputs_s actuator_outputs;
+				_actuator_outputs_sub.copy(&actuator_outputs);
+				Eigen::Vector3d omega_vector;
+				// Print the motor outputs
+				int idx = 0;
+				for (uint32_t  i = 0; i < actuator_outputs.noutputs; ++i) {
+					if (i != (uint32_t)_motor_failure - 1 && idx < 3) {
+						double max_rpm = 8000.0;
+						double motor_rpm = (double)actuator_outputs.output[i] * max_rpm;
+						omega_vector(idx) = motor_rpm * 2.0 * M_PI / 60.0;
+						idx++;
+					}
+				}
+
+				// Eigen::Vector3d world_forces = _rotor.updateRotorState(omega_vector, att);
+				// vehicle_rotor_forces_s _rotor_forces;
+				// // Publish the rotor forces
+				// _rotor_forces.timestamp = timestamp;
+				// _rotor_forces.force[0] = world_forces(0);
+				// _rotor_forces.force[1] = world_forces(1);
+				// _rotor_forces.force[2] = world_forces(2);
+				// _rotor_forces_sub.publish(_rotor_forces);
+
+			}
 		}
 
-		_local_pos_sub.update(&_local_pos);
-		_trajectory_setpoint_sub.update(&_setpoint);
 		_vehicle_attitude_sub.update(&_vehicle_attitude);
 
-		Inputs inputs = {_setpoint.position[0], _setpoint.position[1], _setpoint.position[2]};
-		State state = {
-			{_local_pos.x, _local_pos.y, _local_pos.z},
-			{_local_pos.vx, _local_pos.vy, _local_pos.vz},
-			{0.0, 0.0, 0.0},
-			{0.0, 0.0, 0.0}
-		};
+		if (_local_pos_sub.update(&_local_pos) && _trajectory_setpoint_sub.update(&_setpoint))
+		{
+			// Copy the actuator outputs
+			actuator_outputs_s actuator_outputs;
+			_actuator_outputs_sub.copy(&actuator_outputs);
 
-		// Run the URpositionControl
-		std::array<double, 3> n_des = _ur_pos_control.control(inputs, state, params);
+			Inputs inputs = {_setpoint.position[0], _setpoint.position[1], _setpoint.position[2]};
+			State state = {
+				{_local_pos.x, _local_pos.y, _local_pos.z},
+				{_local_pos.vx, _local_pos.vy, _local_pos.vz},
+				{0.0, 0.0, 0.0},
+				{0.0, 0.0, 0.0}
+			};
 
-		// Publish the result
-		vehicle_thrust_s thrust_msg{};
-		thrust_msg.timestamp = hrt_absolute_time();
-		thrust_msg.xyz	[0] = n_des[0];
-		thrust_msg.xyz	[1] = n_des[1];
-		thrust_msg.xyz	[2] = n_des[2];
-		_vehicle_thrust_pub.publish(thrust_msg);
+			// Run the URpositionControl
+			std::array<double, 3> n_des = _ur_pos_control.control(inputs, state, params);
+
+			// Publish the result
+			vehicle_thrust_s thrust_msg{};
+			thrust_msg.timestamp = hrt_absolute_time();
+			thrust_msg.xyz[0] = n_des[0];
+			thrust_msg.xyz[1] = n_des[1];
+			thrust_msg.xyz[2] = n_des[2];
+			_vehicle_thrust_pub.publish(thrust_msg);
+		}
 
 	// }
 	vehicle_local_position_s vehicle_local_position;

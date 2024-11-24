@@ -1,11 +1,8 @@
-#ifndef ROTOR_OMEGA_HPP
-#define ROTOR_OMEGA_HPP
 
+
+#pragma once
 #include <Eigen/Dense>
 #include <iostream> // For printing values
-
-namespace px4 {
-namespace mylib {
 
 class RotorOmega {
 private:
@@ -14,7 +11,10 @@ private:
 
 public:
     // Constructor
-    RotorOmega(double thrust_coeff, double torque_coeff);
+    RotorOmega();
+
+    // Set to initialize coefficients
+    void setCoefficients(double thrust_coeff, double torque_coeff);
 
     // Compute thrust
     double computeThrust(double omega) const;
@@ -29,7 +29,3 @@ public:
     void printRotorValues(double omega) const;
 };
 
-} // namespace mylib
-} // namespace px4
-
-#endif // ROTOR_OMEGA_HPP

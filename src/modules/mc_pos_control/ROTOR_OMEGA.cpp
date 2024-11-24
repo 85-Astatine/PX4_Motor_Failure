@@ -1,12 +1,14 @@
 #include "ROTOR_OMEGA.hpp"
 #include <cmath>
 
-namespace px4 {
-namespace mylib {
 
-// Constructor to initialize coefficients
-RotorOmega::RotorOmega(double thrust_coeff, double torque_coeff)
-    : thrust_coefficient(thrust_coeff), torque_coefficient(torque_coeff) {}
+RotorOmega::RotorOmega(){};
+
+// Set coefficients
+void RotorOmega::setCoefficients(double thrust_coeff, double torque_coeff) {
+    thrust_coefficient = thrust_coeff;
+    torque_coefficient = torque_coeff;
+}
 
 // Compute thrust based on angular velocity
 double RotorOmega::computeThrust(double omega) const {
@@ -44,5 +46,4 @@ void RotorOmega::printRotorValues(double omega) const {
     std::cout << "Thrust: " << thrust << ", Torque: " << torque << std::endl;
 }
 
-} // namespace mylib
-} // namespace px4
+

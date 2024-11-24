@@ -43,6 +43,7 @@
 #include "GotoControl/GotoControl.hpp"
 #include "URestimator.hpp"
 #include "URPosControl.hpp"
+#include "ROTOR_OMEGA.hpp"
 #include <matrix/math.hpp>
 #include <drivers/drv_hrt.h>
 #include <lib/mathlib/math/filter/AlphaFilter.hpp>
@@ -110,6 +111,7 @@ private:
 	uORB::Publication<vehicle_local_position_setpoint_s> _local_pos_sp_pub{ORB_ID(vehicle_local_position_setpoint)};	/**< vehicle local position setpoint publication */
 	uORB::Publication<failure_motor_status_s> _motor_failure_pub{ORB_ID(failure_motor_status)};
 	uORB::Publication<vehicle_thrust_s> _vehicle_thrust_pub{ORB_ID(vehicle_thrust)};
+	uORB::Publication<vehicle_rotor_forces_s> _rotor_forces_sub{ORB_ID(vehicle_rotor_forces)};
 
 
 	uORB::SubscriptionCallbackWorkItem _local_pos_sub{this, ORB_ID(vehicle_local_position)};	/**< vehicle local position */
@@ -123,6 +125,7 @@ private:
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
 	uORB::Subscription _gyro_sub{ORB_ID(sensor_gyro)};
 	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
+	uORB::Subscription _actuator_outputs_sub{ORB_ID(actuator_outputs)};
 
 	vehicle_attitude_s _vehicle_attitude{};
 	vehicle_local_position_s _local_pos{};
@@ -133,7 +136,8 @@ private:
 	vehicle_control_mode_s _vehicle_control_mode{};
 	sensor_gyro_s _gyro_data{};
 	failure_motor_status_s failure_msg{};
-
+	// vehicle_rotor_forces_s _rotor_forces{};
+	actuator_outputs_s _actuator_outputs{};
 	// trajectory_setpoint_s _setpoint{PositionControl::empty_trajectory_setpoint};
 	// vehicle_control_mode_s _vehicle_control_mode{};
 
@@ -213,6 +217,8 @@ private:
 		(ParamFloat<px4::params::MPC_YAWRAUTO_ACC>) _param_mpc_yawrauto_acc
 	);
 
+	// RotorOmega rotor(thrust_coeff, torque_coeff);
+
 	math::WelfordMean<float> _sample_interval_s{};
 
 	AlphaFilter<matrix::Vector2f> _vel_xy_lp_filter{};
@@ -228,6 +234,10 @@ private:
 	PositionControl _control; ///< class for core PID position control
 	URestimator _urestimator;
 	URPosControl _ur_pos_control;
+	// double thrust_coeff = 0.01; // Replace with actual value
+    	// double torque_coeff = 0.001; // Replace with actual value
+	// RotorOmega _rotor;
+	// _rotor.setThrustCoeff(thrust_coeff, torque_coeff);
 
 	Params params{};
 
