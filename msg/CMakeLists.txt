@@ -259,6 +259,7 @@ set(msg_files
 	VehicleStatus.msg
 	VehicleThrust.msg
 	VehicleN.msg
+	VehicleRotorForces.msg
 	VehicleThrustSetpoint.msg
 	VehicleTorqueSetpoint.msg
 	VehicleTrajectoryBezier.msg
