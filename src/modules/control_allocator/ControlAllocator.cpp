@@ -313,155 +313,208 @@ ControlAllocator::Run()
 	ScheduleDelayed(50_ms);
 #endif
 
-	// Check if parameters have changed
-	if (_parameter_update_sub.updated() && !_armed) {
-		// clear update
-		parameter_update_s param_update;
-		_parameter_update_sub.copy(&param_update);
+	if (_failure_motor_status_sub.updated()) {
+		failure_motor_status_s failure_motor_status;
 
-		if (_handled_motor_failure_bitmask == 0) {
-			// We don't update the geometry after an actuator failure, as it could lead to unexpected results
-			// (e.g. a user could add/remove motors, such that the bitmask isn't correct anymore)
-			updateParams();
-			parameters_updated();
+		if (_failure_motor_status_sub.copy(&failure_motor_status)) {
+			_motor_failure = failure_motor_status.failure_type;
 		}
 	}
 
-	if (_num_control_allocation == 0 || _actuator_effectiveness == nullptr) {
-		return;
+	if(_motor_failure>0 && _vehicle_attitude_sub.updated() && _vehicle_angular_velocity_sub.updated() && _vehicle_thrust_sub.updated() && _vehicle_acceleration_sub.updated()) {
+		vehicle_attitude_s vehicle_attitude;
+		vehicle_angular_velocity_s vehicle_angular_velocity;
+		vehicle_thrust_s vehicle_thrust;
+		vehicle_acceleration_s vehicle_acceleration;
+
+		_vehicle_attitude_sub.copy(&vehicle_attitude);
+		_vehicle_angular_velocity_sub.copy(&vehicle_angular_velocity);
+		_vehicle_thrust_sub.copy(&vehicle_thrust);
+		_vehicle_acceleration_sub.copy(&vehicle_acceleration);
+
+		State state;
+		state.fail_id = _motor_failure-1;
+		Quatf q(vehicle_attitude.q);
+		Eulerf attitude(q);
+		state.att = Eigen::Vector3d(attitude(0), attitude(1), attitude(2));
+		state.n_des = Eigen::Vector3d(vehicle_thrust.xyz[0], vehicle_thrust.xyz[1], vehicle_thrust.xyz[2]);
+		state.w = _last_w;
+		state.a = Eigen::Vector3d(vehicle_acceleration.xyz[0], vehicle_acceleration.xyz[1], vehicle_acceleration.xyz[2]);
+		state.h0 = computeH0(state.att, state.n_des);
+		state.zdd = computeZdd(state.att, state.a);
+		state.U0 = computeOmega(state.w);
+		_last_w = state.w; //TODO : DO check if this thing works
+
+		ParamsIndi par;
+
+		Eigen::Vector4d nu = Eigen::Vector4d(0.0, 0.0, 0.0, 0.0); //TODO : Where do i get this
+		Eigen::Vector2d ddy = Eigen::Vector2d(0.0, 0.0); //TODO : Where do i get this
+		double rdot = vehicle_angular_velocity.xyz[2];
+		Eigen::Vector4d U, Y, dU;
+
+
+		allocation_att_indi(state, nu, ddy, rdot, par, U, Y, dU);
+		// setting U as motor output
+		actuator_motors_s actuator_motors{};
+		actuator_motors.timestamp = hrt_absolute_time();
+		// actuator_motors.noutputs = 4;
+		actuator_motors.control[0] = sqrt(U(0));
+		actuator_motors.control[1] = sqrt(U(1));
+		actuator_motors.control[2] = sqrt(U(2));
+		actuator_motors.control[3] = sqrt(U(3));
+		_actuator_motors_pub.publish(actuator_motors);
 	}
 
-	{
-		vehicle_status_s vehicle_status;
+	if(_motor_failure==0) {
+		// Check if parameters have changed
+		if (_parameter_update_sub.updated() && !_armed) {
+			// clear update
+			parameter_update_s param_update;
+			_parameter_update_sub.copy(&param_update);
 
-		if (_vehicle_status_sub.update(&vehicle_status)) {
-
-			_armed = vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED;
-
-			ActuatorEffectiveness::FlightPhase flight_phase{ActuatorEffectiveness::FlightPhase::HOVER_FLIGHT};
-
-			// Check if the current flight phase is HOVER or FIXED_WING
-			if (vehicle_status.vehicle_type == vehicle_status_s::VEHICLE_TYPE_ROTARY_WING) {
-				flight_phase = ActuatorEffectiveness::FlightPhase::HOVER_FLIGHT;
-
-			} else {
-				flight_phase = ActuatorEffectiveness::FlightPhase::FORWARD_FLIGHT;
+			if (_handled_motor_failure_bitmask == 0) {
+				// We don't update the geometry after an actuator failure, as it could lead to unexpected results
+				// (e.g. a user could add/remove motors, such that the bitmask isn't correct anymore)
+				updateParams();
+				parameters_updated();
 			}
+		}
 
-			// Special cases for VTOL in transition
-			if (vehicle_status.is_vtol && vehicle_status.in_transition_mode) {
-				if (vehicle_status.in_transition_to_fw) {
-					flight_phase = ActuatorEffectiveness::FlightPhase::TRANSITION_HF_TO_FF;
+		if (_num_control_allocation == 0 || _actuator_effectiveness == nullptr) {
+			return;
+		}
+
+		{
+			vehicle_status_s vehicle_status;
+
+			if (_vehicle_status_sub.update(&vehicle_status)) {
+
+				_armed = vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED;
+
+				ActuatorEffectiveness::FlightPhase flight_phase{ActuatorEffectiveness::FlightPhase::HOVER_FLIGHT};
+
+				// Check if the current flight phase is HOVER or FIXED_WING
+				if (vehicle_status.vehicle_type == vehicle_status_s::VEHICLE_TYPE_ROTARY_WING) {
+					flight_phase = ActuatorEffectiveness::FlightPhase::HOVER_FLIGHT;
 
 				} else {
-					flight_phase = ActuatorEffectiveness::FlightPhase::TRANSITION_FF_TO_HF;
+					flight_phase = ActuatorEffectiveness::FlightPhase::FORWARD_FLIGHT;
+				}
+
+				// Special cases for VTOL in transition
+				if (vehicle_status.is_vtol && vehicle_status.in_transition_mode) {
+					if (vehicle_status.in_transition_to_fw) {
+						flight_phase = ActuatorEffectiveness::FlightPhase::TRANSITION_HF_TO_FF;
+
+					} else {
+						flight_phase = ActuatorEffectiveness::FlightPhase::TRANSITION_FF_TO_HF;
+					}
+				}
+
+				// Forward to effectiveness source
+				_actuator_effectiveness->setFlightPhase(flight_phase);
+			}
+		}
+
+		{
+			vehicle_control_mode_s vehicle_control_mode;
+
+			if (_vehicle_control_mode_sub.update(&vehicle_control_mode)) {
+				_publish_controls = vehicle_control_mode.flag_control_allocation_enabled;
+			}
+		}
+
+		// Guard against too small (< 0.2ms) and too large (> 20ms) dt's.
+		const hrt_abstime now = hrt_absolute_time();
+		const float dt = math::constrain(((now - _last_run) / 1e6f), 0.0002f, 0.02f);
+
+		bool do_update = false;
+		vehicle_torque_setpoint_s vehicle_torque_setpoint;
+		vehicle_thrust_setpoint_s vehicle_thrust_setpoint;
+
+		// Run allocator on torque changes
+		if (_vehicle_torque_setpoint_sub.update(&vehicle_torque_setpoint)) {
+			_torque_sp = matrix::Vector3f(vehicle_torque_setpoint.xyz);
+
+			do_update = true;
+			_timestamp_sample = vehicle_torque_setpoint.timestamp_sample;
+
+		}
+
+		// Also run allocator on thrust setpoint changes if the torque setpoint
+		// has not been updated for more than 5ms
+		if (_vehicle_thrust_setpoint_sub.update(&vehicle_thrust_setpoint)) {
+			_thrust_sp = matrix::Vector3f(vehicle_thrust_setpoint.xyz);
+
+			if (dt > 0.005f) {
+				do_update = true;
+				_timestamp_sample = vehicle_thrust_setpoint.timestamp_sample;
+			}
+		}
+
+		if (do_update) {
+			_last_run = now;
+
+			check_for_motor_failures();
+
+			update_effectiveness_matrix_if_needed(EffectivenessUpdateReason::NO_EXTERNAL_UPDATE);
+
+			// Set control setpoint vector(s)
+			matrix::Vector<float, NUM_AXES> c[ActuatorEffectiveness::MAX_NUM_MATRICES];
+			c[0](0) = _torque_sp(0);
+			c[0](1) = _torque_sp(1);
+			c[0](2) = _torque_sp(2);
+			c[0](3) = _thrust_sp(0);
+			c[0](4) = _thrust_sp(1);
+			c[0](5) = _thrust_sp(2);
+
+			if (_num_control_allocation > 1) {
+				if (_vehicle_torque_setpoint1_sub.copy(&vehicle_torque_setpoint)) {
+					c[1](0) = vehicle_torque_setpoint.xyz[0];
+					c[1](1) = vehicle_torque_setpoint.xyz[1];
+					c[1](2) = vehicle_torque_setpoint.xyz[2];
+				}
+
+				if (_vehicle_thrust_setpoint1_sub.copy(&vehicle_thrust_setpoint)) {
+					c[1](3) = vehicle_thrust_setpoint.xyz[0];
+					c[1](4) = vehicle_thrust_setpoint.xyz[1];
+					c[1](5) = vehicle_thrust_setpoint.xyz[2];
 				}
 			}
 
-			// Forward to effectiveness source
-			_actuator_effectiveness->setFlightPhase(flight_phase);
-		}
-	}
+			for (int i = 0; i < _num_control_allocation; ++i) {
 
-	{
-		vehicle_control_mode_s vehicle_control_mode;
+				_control_allocation[i]->setControlSetpoint(c[i]);
 
-		if (_vehicle_control_mode_sub.update(&vehicle_control_mode)) {
-			_publish_controls = vehicle_control_mode.flag_control_allocation_enabled;
-		}
-	}
+				// Do allocation
+				_control_allocation[i]->allocate();
+				_actuator_effectiveness->allocateAuxilaryControls(dt, i, _control_allocation[i]->_actuator_sp); //flaps and spoilers
+				_actuator_effectiveness->updateSetpoint(c[i], i, _control_allocation[i]->_actuator_sp,
+									_control_allocation[i]->getActuatorMin(), _control_allocation[i]->getActuatorMax());
 
-	// Guard against too small (< 0.2ms) and too large (> 20ms) dt's.
-	const hrt_abstime now = hrt_absolute_time();
-	const float dt = math::constrain(((now - _last_run) / 1e6f), 0.0002f, 0.02f);
+				if (_has_slew_rate) {
+					_control_allocation[i]->applySlewRateLimit(dt);
+				}
 
-	bool do_update = false;
-	vehicle_torque_setpoint_s vehicle_torque_setpoint;
-	vehicle_thrust_setpoint_s vehicle_thrust_setpoint;
-
-	// Run allocator on torque changes
-	if (_vehicle_torque_setpoint_sub.update(&vehicle_torque_setpoint)) {
-		_torque_sp = matrix::Vector3f(vehicle_torque_setpoint.xyz);
-
-		do_update = true;
-		_timestamp_sample = vehicle_torque_setpoint.timestamp_sample;
-
-	}
-
-	// Also run allocator on thrust setpoint changes if the torque setpoint
-	// has not been updated for more than 5ms
-	if (_vehicle_thrust_setpoint_sub.update(&vehicle_thrust_setpoint)) {
-		_thrust_sp = matrix::Vector3f(vehicle_thrust_setpoint.xyz);
-
-		if (dt > 0.005f) {
-			do_update = true;
-			_timestamp_sample = vehicle_thrust_setpoint.timestamp_sample;
-		}
-	}
-
-	if (do_update) {
-		_last_run = now;
-
-		check_for_motor_failures();
-
-		update_effectiveness_matrix_if_needed(EffectivenessUpdateReason::NO_EXTERNAL_UPDATE);
-
-		// Set control setpoint vector(s)
-		matrix::Vector<float, NUM_AXES> c[ActuatorEffectiveness::MAX_NUM_MATRICES];
-		c[0](0) = _torque_sp(0);
-		c[0](1) = _torque_sp(1);
-		c[0](2) = _torque_sp(2);
-		c[0](3) = _thrust_sp(0);
-		c[0](4) = _thrust_sp(1);
-		c[0](5) = _thrust_sp(2);
-
-		if (_num_control_allocation > 1) {
-			if (_vehicle_torque_setpoint1_sub.copy(&vehicle_torque_setpoint)) {
-				c[1](0) = vehicle_torque_setpoint.xyz[0];
-				c[1](1) = vehicle_torque_setpoint.xyz[1];
-				c[1](2) = vehicle_torque_setpoint.xyz[2];
-			}
-
-			if (_vehicle_thrust_setpoint1_sub.copy(&vehicle_thrust_setpoint)) {
-				c[1](3) = vehicle_thrust_setpoint.xyz[0];
-				c[1](4) = vehicle_thrust_setpoint.xyz[1];
-				c[1](5) = vehicle_thrust_setpoint.xyz[2];
+				_control_allocation[i]->clipActuatorSetpoint();
 			}
 		}
 
-		for (int i = 0; i < _num_control_allocation; ++i) {
+		// Publish actuator setpoint and allocator status
+		publish_actuator_controls();
 
-			_control_allocation[i]->setControlSetpoint(c[i]);
+		// Publish status at limited rate, as it's somewhat expensive and we use it for slower dynamics
+		// (i.e. anti-integrator windup)
+		if (now - _last_status_pub >= 5_ms) {
+			publish_control_allocator_status(0);
 
-			// Do allocation
-			_control_allocation[i]->allocate();
-			_actuator_effectiveness->allocateAuxilaryControls(dt, i, _control_allocation[i]->_actuator_sp); //flaps and spoilers
-			_actuator_effectiveness->updateSetpoint(c[i], i, _control_allocation[i]->_actuator_sp,
-								_control_allocation[i]->getActuatorMin(), _control_allocation[i]->getActuatorMax());
-
-			if (_has_slew_rate) {
-				_control_allocation[i]->applySlewRateLimit(dt);
+			if (_num_control_allocation > 1) {
+				publish_control_allocator_status(1);
 			}
 
-			_control_allocation[i]->clipActuatorSetpoint();
+			_last_status_pub = now;
 		}
 	}
-
-	// Publish actuator setpoint and allocator status
-	publish_actuator_controls();
-
-	// Publish status at limited rate, as it's somewhat expensive and we use it for slower dynamics
-	// (i.e. anti-integrator windup)
-	if (now - _last_status_pub >= 5_ms) {
-		publish_control_allocator_status(0);
-
-		if (_num_control_allocation > 1) {
-			publish_control_allocator_status(1);
-		}
-
-		_last_status_pub = now;
-	}
-
 	perf_end(_loop_perf);
 }
 

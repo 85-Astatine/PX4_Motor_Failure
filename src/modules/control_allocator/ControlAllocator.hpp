@@ -78,6 +78,13 @@
 #include <uORB/topics/vehicle_thrust_setpoint.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/failure_detector_status.h>
+#include <uORB/topics/failure_motor_status.h>
+#include <uORB/topics/vehicle_attitude.h>
+#include <uORB/topics/vehicle_angular_velocity.h>
+#include <uORB/topics/vehicle_thrust.h>
+#include <uORB/topics/vehicle_acceleration.h>
+
+#include "AllocationAttIndi.hpp"
 
 class ControlAllocator : public ModuleBase<ControlAllocator>, public ModuleParams, public px4::ScheduledWorkItem
 {
@@ -191,10 +198,18 @@ private:
 	uORB::Subscription _vehicle_control_mode_sub{ORB_ID(vehicle_control_mode)};
 	uORB::Subscription _failure_detector_status_sub{ORB_ID(failure_detector_status)};
 
+	uORB::Subscription _failure_motor_status_sub{ORB_ID(failure_motor_status)};
+	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
+	uORB::Subscription _vehicle_angular_velocity_sub{ORB_ID(vehicle_angular_velocity)};
+	uORB::Subscription _vehicle_thrust_sub{ORB_ID(vehicle_thrust)};
+	uORB::Subscription _vehicle_acceleration_sub{ORB_ID(vehicle_acceleration)};
+
 	matrix::Vector3f _torque_sp;
 	matrix::Vector3f _thrust_sp;
 	bool _publish_controls{true};
 
+	Eigen::Vector4d _last_w = Eigen::Vector4d::Zero();
+	int _motor_failure = 0;
 	// Reflects motor failures that are currently handled, not motor failures that are reported.
 	// For example, the system might report two motor failures, but only the first one is handled by CA
 	uint16_t _handled_motor_failure_bitmask{0};

@@ -34,6 +34,12 @@
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 add_subdirectory(ActuatorEffectiveness)
 add_subdirectory(ControlAllocation)
+find_package(Eigen3 REQUIRED)
+include_directories(${EIGEN3_INCLUDE_DIR})
+# Not good
+add_compile_options(-Wno-error=float-equal) # This is a compiler flag that disables the error message for floating point equality comparison
+
+
 
 px4_add_module(
 	MODULE modules__control_allocator
@@ -45,6 +51,8 @@ px4_add_module(
 	SRCS
 		ControlAllocator.cpp
 		ControlAllocator.hpp
+		AllocationAttIndi.hpp
+
 	MODULE_CONFIG
 		module.yaml
 	DEPENDS
