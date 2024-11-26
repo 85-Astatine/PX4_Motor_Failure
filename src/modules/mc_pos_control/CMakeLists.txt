@@ -36,6 +36,10 @@ add_subdirectory(PositionControl)
 add_subdirectory(Takeoff)
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
+target_link_libraries(${MODULE_NAME} PRIVATE array)
+add_library(array STATIC src/path_to_array.cpp)
+
+
 px4_add_module(
 	MODULE modules__mc_pos_control
 	MAIN mc_pos_control
@@ -56,5 +60,5 @@ px4_add_module(
 		controllib
 		geo
 		SlewRate
-
+		array
 	)

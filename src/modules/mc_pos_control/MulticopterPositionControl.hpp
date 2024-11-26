@@ -77,6 +77,7 @@
 #include <uORB/topics/failure_motor_status.h>
 #include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/vehicle_rotor_forces.h>
+// #include <array.h>
 
 using namespace time_literals;
 
@@ -155,6 +156,8 @@ private:
 		.maybe_landed = true,
 		.landed = true,
 	};
+
+	std::array<double, 3> n_des_old;
 
 	DEFINE_PARAMETERS(
 		// Position Control
@@ -270,6 +273,7 @@ private:
 	 */
 	void parameters_update(bool force);
 
+        std::array<double, 3> discreate_derivative_3d(std::array<double, 3> curr, std::array<double, 3> old, double T);
 	/**
 	 * Check for validity of positon/velocity states.
 	 */
