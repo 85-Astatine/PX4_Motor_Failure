@@ -83,7 +83,8 @@
 #include <uORB/topics/vehicle_angular_velocity.h>
 #include <uORB/topics/vehicle_thrust.h>
 #include <uORB/topics/vehicle_acceleration.h>
-
+#include <uORB/topics/vehicle_rotor_forces.h>
+#include "ROTOR_OMEGA.hpp"
 #include "AllocationAttIndi.hpp"
 
 class ControlAllocator : public ModuleBase<ControlAllocator>, public ModuleParams, public px4::ScheduledWorkItem

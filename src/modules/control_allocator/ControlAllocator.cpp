@@ -321,7 +321,7 @@ ControlAllocator::Run()
 		}
 	}
 
-	if(_motor_failure>0 && _vehicle_attitude_sub.updated() && _vehicle_angular_velocity_sub.updated() && _vehicle_thrust_sub.updated() && _vehicle_acceleration_sub.updated()) {
+	if(_vehicle_attitude_sub.updated() && _vehicle_angular_velocity_sub.updated() && _vehicle_thrust_sub.updated() && _vehicle_acceleration_sub.updated()) {
 		vehicle_attitude_s vehicle_attitude;
 		vehicle_angular_velocity_s vehicle_angular_velocity;
 		vehicle_thrust_s vehicle_thrust;
@@ -343,7 +343,7 @@ ControlAllocator::Run()
 		state.h0 = computeH0(state.att, state.n_des);
 		state.zdd = computeZdd(state.att, state.a);
 		state.U0 = computeOmega(state.w);
-		_last_w = state.w; //TODO : DO check if this thing works
+		_last_w = state.w;
 
 		ParamsIndi par;
 
@@ -358,14 +358,14 @@ ControlAllocator::Run()
 		actuator_motors_s actuator_motors{};
 		actuator_motors.timestamp = hrt_absolute_time();
 		// actuator_motors.noutputs = 4;
-		actuator_motors.control[0] = sqrt(U(0));
-		actuator_motors.control[1] = sqrt(U(1));
-		actuator_motors.control[2] = sqrt(U(2));
-		actuator_motors.control[3] = sqrt(U(3));
+		actuator_motors.control[0] = U(0);
+		actuator_motors.control[1] = U(1);
+		actuator_motors.control[2] = U(2);
+		actuator_motors.control[3] = U(3);
 		_actuator_motors_pub.publish(actuator_motors);
 	}
 
-	if(_motor_failure==0) {
+	if(false) {
 		// Check if parameters have changed
 		if (_parameter_update_sub.updated() && !_armed) {
 			// clear update
@@ -593,6 +593,7 @@ ControlAllocator::update_effectiveness_matrix_if_needed(EffectivenessUpdateReaso
 				++actuator_idx;
 			}
 		}
+		//"""it'll be changed later on if required"""
 
 		// Handle failed actuators
 		if (_handled_motor_failure_bitmask) {
@@ -614,6 +615,7 @@ ControlAllocator::update_effectiveness_matrix_if_needed(EffectivenessUpdateReaso
 				++actuator_idx;
 			}
 		}
+		//"""above'll be changed later on if required"""
 
 		for (int i = 0; i < _num_control_allocation; ++i) {
 			_control_allocation[i]->setActuatorMin(minimum[i]);
@@ -625,21 +627,40 @@ ControlAllocator::update_effectiveness_matrix_if_needed(EffectivenessUpdateReaso
 			// which in turn would degrade the control of the main axes that actually should and can be controlled.
 
 			ActuatorEffectiveness::EffectivenessMatrix &matrix = config.effectiveness_matrices[i];
+			if(static_cast<int>(ORB_ID::failure_detector_status) != 0){
+				// RotorOmega instance setup
+				ROTOR_OMEGA.setCoefficients(0.1, 0.1); // Replace with actual coefficients
 
-			for (int n = 0; n < NUM_AXES; n++) {
-				bool all_entries_small = true;
+				Eigen::Vector3d omega_vector(OMEGA_1, OMEGA_2, OMEGA_3); // Replace with actual angular velocities
+				Eigen::Vector3d attitude(PHI, THETA, PSI);               // Replace with actual attitude values
 
-				for (int m = 0; m < config.num_actuators_matrix[i]; m++) {
-					if (fabsf(matrix(n, m)) > 0.05f) {
-						all_entries_small = false;
+				// Compute forces and torques using RotorOmega
+				Eigen::Vector3d world_forces = RotorOmega.updateRotorState(omega_vector, attitude);
+
+				// Print for debugging
+				// std::cout << "World Forces: " << world_forces.transpose() << std::endl;
+
+				for (int n = 0; n < NUM_AXES; n++) {
+					for (int m = 0; m < config.num_actuators_matrix[i]; m++) {
+					matrix(n, m) = world_forces(n % 3); // Assign forces (or other logic as required)
 					}
 				}
+			}
+			else{
+				for (int n = 0; n < NUM_AXES; n++) {
+					bool all_entries_small = true;
 
-				if (all_entries_small) {
-					matrix.row(n) = 0.f;
+					for (int m = 0; m < config.num_actuators_matrix[i]; m++) {
+						if (fabsf(matrix(n, m)) > 0.05f) {
+							all_entries_small = false;
+						}
+					}
+
+					if (all_entries_small) {
+						matrix.row(n) = 0.f;
+					}
 				}
 			}
-
 			// Assign control effectiveness matrix
 			int total_num_actuators = config.num_actuators_matrix[i];
 			_control_allocation[i]->setEffectivenessMatrix(config.effectiveness_matrices[i], config.trim[i],
